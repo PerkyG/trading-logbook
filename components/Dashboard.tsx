@@ -22,10 +22,10 @@ interface TraderStats {
   };
   level: {
     level: number;
-    levelToGo: number;
+    rToNextLevel: number;
     currentRiskPct: number;
     cumRSinceLevel: number;
-    tradesSinceLevel: number;
+    levelUpThreshold: number;
   };
   currentEquity: number;
   unanalysedCount: number;
@@ -106,12 +106,11 @@ export default function DashboardView({ currentTraderId }: { currentTraderId: nu
           {settings && (
             <GamificationPanel
               level={myStats.level.level}
-              levelToGo={myStats.level.levelToGo}
+              rToNextLevel={myStats.level.rToNextLevel}
               currentRiskPct={myStats.level.currentRiskPct}
               cumRSinceLevel={myStats.level.cumRSinceLevel}
-              tradesSinceLevel={myStats.level.tradesSinceLevel}
+              levelUpThreshold={myStats.level.levelUpThreshold}
               baseRiskPct={parseFloat(settings.base_risk_pct)}
-              stepsizeUp={settings.stepsize_up}
               enabled={settings.gamification_enabled}
             />
           )}

@@ -2,23 +2,21 @@
 
 interface GamificationPanelProps {
   level: number;
-  levelToGo: number;
+  rToNextLevel: number;
   currentRiskPct: number;
   cumRSinceLevel: number;
-  tradesSinceLevel: number;
+  levelUpThreshold: number;
   baseRiskPct: number;
-  stepsizeUp: number;
   enabled: boolean;
 }
 
 export default function GamificationPanel({
   level,
-  levelToGo,
+  rToNextLevel,
   currentRiskPct,
   cumRSinceLevel,
-  tradesSinceLevel,
+  levelUpThreshold,
   baseRiskPct,
-  stepsizeUp,
   enabled,
 }: GamificationPanelProps) {
   if (!enabled) {
@@ -30,7 +28,7 @@ export default function GamificationPanel({
     );
   }
 
-  const progress = stepsizeUp > 0 ? (tradesSinceLevel / stepsizeUp) * 100 : 0;
+  const progress = levelUpThreshold > 0 ? (cumRSinceLevel / levelUpThreshold) * 100 : 0;
   const riskPctDisplay = (currentRiskPct * 100).toFixed(2);
   const baseRiskDisplay = (baseRiskPct * 100).toFixed(2);
 
@@ -58,13 +56,13 @@ export default function GamificationPanel({
             <div className="text-lg text-gray-400">{baseRiskDisplay}%</div>
           </div>
           <div>
-            <div className="text-gray-500 text-xs">Trades to Next Level</div>
-            <div className="text-lg font-bold">{levelToGo}</div>
+            <div className="text-gray-500 text-xs">R to Next Level</div>
+            <div className="text-lg font-bold">{rToNextLevel.toFixed(1)}R</div>
           </div>
           <div>
-            <div className="text-gray-500 text-xs">Cum R Since Level</div>
+            <div className="text-gray-500 text-xs">Cum R This Level</div>
             <div className={`text-lg font-bold ${cumRSinceLevel >= 0 ? 'stat-positive' : 'stat-negative'}`}>
-              {cumRSinceLevel.toFixed(2)}
+              {cumRSinceLevel.toFixed(2)}R
             </div>
           </div>
         </div>
@@ -73,23 +71,23 @@ export default function GamificationPanel({
       {/* Progress bar */}
       <div>
         <div className="flex justify-between text-xs text-gray-500 mb-1">
-          <span>{tradesSinceLevel} / {stepsizeUp} trades</span>
-          <span>{progress.toFixed(0)}%</span>
+          <span>{cumRSinceLevel.toFixed(1)}R / {levelUpThreshold}R</span>
+          <span>{Math.max(0, Math.min(progress, 100)).toFixed(0)}%</span>
         </div>
         <div className="h-3 bg-gray-800 rounded-full overflow-hidden">
           <div
             className={`h-full rounded-full transition-all duration-300 ${
               level > 0 ? 'bg-emerald-500' : level < 0 ? 'bg-red-500' : 'bg-blue-500'
             }`}
-            style={{ width: `${Math.min(progress, 100)}%` }}
+            style={{ width: `${Math.max(0, Math.min(progress, 100))}%` }}
           />
         </div>
       </div>
 
       {/* Rules reminder */}
       <div className="mt-4 text-xs text-gray-500">
-        <p>Complete {stepsizeUp} trades with cumulative R &ge; 0 to level up.</p>
-        <p>If cumulative R drops below 0, you level down.</p>
+        <p>Accumulate {levelUpThreshold}R to level up. Risk increases by multiplier per level.</p>
+        <p>If cumulative R drops below 0 at any point, you level down.</p>
       </div>
     </div>
   );

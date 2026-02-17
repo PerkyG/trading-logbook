@@ -1,16 +1,16 @@
 export interface GamificationSettings {
   base_risk_pct: number;
   risk_multiplier: number;
-  stepsize_up: number;
+  stepsize_up: number; // R threshold to level up (e.g. 30 = 30R cumulative)
   gamification_enabled: boolean;
 }
 
 export interface LevelState {
   level: number;
-  levelToGo: number;
+  rToNextLevel: number;     // how much R remaining to reach next level-up
   currentRiskPct: number;
-  cumRSinceLevel: number;
-  tradesSinceLevel: number;
+  cumRSinceLevel: number;   // R accumulated since this level started
+  levelUpThreshold: number; // the R threshold for this level (e.g. 30R)
 }
 
 export function getRiskPctForLevel(baseRiskPct: number, riskMultiplier: number, level: number): number {
@@ -18,6 +18,19 @@ export function getRiskPctForLevel(baseRiskPct: number, riskMultiplier: number, 
   return baseRiskPct * Math.pow(riskMultiplier, level);
 }
 
+/**
+ * Gamification logic:
+ * - Level starts at 0 with base risk
+ * - cumRSinceLevel tracks cumulative R earned since the current level was reached
+ * - When cumRSinceLevel >= stepsize_up (e.g. 30R), level goes UP by 1, cumR resets to 0
+ * - When cumRSinceLevel drops below 0 (i.e. you lose more R than you gained at this level),
+ *   level goes DOWN by 1, cumR resets to 0
+ * - Risk at level N = base_risk * (risk_multiplier ^ N)
+ *
+ * Example: stepsize_up = 30
+ *   Start at level 0. Earn 30R cumulative → level 1 (risk goes up).
+ *   At level 1, if you then lose 1R and go below 0 cumR → back to level 0.
+ */
 export function calculateLevelState(
   tradeNettRs: number[],
   settings: GamificationSettings
@@ -25,79 +38,77 @@ export function calculateLevelState(
   if (!settings.gamification_enabled) {
     return {
       level: 0,
-      levelToGo: settings.stepsize_up,
+      rToNextLevel: settings.stepsize_up,
       currentRiskPct: settings.base_risk_pct,
       cumRSinceLevel: 0,
-      tradesSinceLevel: 0,
+      levelUpThreshold: settings.stepsize_up,
     };
   }
 
   let level = 0;
   let cumRSinceLevel = 0;
-  let tradesSinceLevel = 0;
 
   for (const nettR of tradeNettRs) {
     cumRSinceLevel += nettR;
-    tradesSinceLevel++;
 
+    // Level DOWN: cumulative R since level start drops below 0
     if (cumRSinceLevel < 0) {
       level = Math.max(level - 1, -3);
       cumRSinceLevel = 0;
-      tradesSinceLevel = 0;
     }
 
-    if (tradesSinceLevel >= settings.stepsize_up) {
+    // Level UP: cumulative R since level start reaches threshold
+    if (cumRSinceLevel >= settings.stepsize_up) {
       level++;
-      cumRSinceLevel = 0;
-      tradesSinceLevel = 0;
+      cumRSinceLevel = cumRSinceLevel - settings.stepsize_up; // carry over excess R
     }
   }
 
+  const rToNextLevel = Math.max(0, settings.stepsize_up - cumRSinceLevel);
+
   return {
     level,
-    levelToGo: settings.stepsize_up - tradesSinceLevel,
+    rToNextLevel: Math.round(rToNextLevel * 100) / 100,
     currentRiskPct: getRiskPctForLevel(settings.base_risk_pct, settings.risk_multiplier, level),
     cumRSinceLevel: Math.round(cumRSinceLevel * 10000) / 10000,
-    tradesSinceLevel,
+    levelUpThreshold: settings.stepsize_up,
   };
 }
 
 export function calculateLevelForEachTrade(
   tradeNettRs: number[],
   settings: GamificationSettings
-): Array<{ level: number; levelToGo: number; riskPct: number }> {
+): Array<{ level: number; rToNextLevel: number; riskPct: number }> {
   if (!settings.gamification_enabled) {
     return tradeNettRs.map(() => ({
       level: 0,
-      levelToGo: settings.stepsize_up,
+      rToNextLevel: settings.stepsize_up,
       riskPct: settings.base_risk_pct,
     }));
   }
 
-  const results: Array<{ level: number; levelToGo: number; riskPct: number }> = [];
+  const results: Array<{ level: number; rToNextLevel: number; riskPct: number }> = [];
   let level = 0;
   let cumRSinceLevel = 0;
-  let tradesSinceLevel = 0;
 
   for (const nettR of tradeNettRs) {
     cumRSinceLevel += nettR;
-    tradesSinceLevel++;
 
     if (cumRSinceLevel < 0) {
       level = Math.max(level - 1, -3);
       cumRSinceLevel = 0;
-      tradesSinceLevel = 0;
     }
 
-    if (tradesSinceLevel >= settings.stepsize_up) {
+    if (cumRSinceLevel >= settings.stepsize_up) {
       level++;
-      cumRSinceLevel = 0;
-      tradesSinceLevel = 0;
+      cumRSinceLevel = cumRSinceLevel - settings.stepsize_up;
     }
+
+    const rToNextLevel = Math.max(0, settings.stepsize_up - cumRSinceLevel);
 
     results.push({
       level,
-      levelToGo: settings.stepsize_up - tradesSinceLevel,
+      rToNextLevel: Math.round(rToNextLevel * 100) / 100,
       riskPct: getRiskPctForLevel(settings.base_risk_pct, settings.risk_multiplier, level),
     });
   }

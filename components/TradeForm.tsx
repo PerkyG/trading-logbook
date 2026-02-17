@@ -29,6 +29,7 @@ export default function TradeForm() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [isLoss, setIsLoss] = useState(false);
 
   const [form, setForm] = useState({
     ticker: '',
@@ -62,6 +63,29 @@ export default function TradeForm() {
     );
   }
 
+  // Auto-detect long/short and calculate live R preview
+  function getTradePreview() {
+    const entry = parseFloat(form.price_entry);
+    const stop = parseFloat(form.price_stop);
+    const exit = parseFloat(form.price_exit);
+
+    if (isNaN(entry) || isNaN(stop)) return null;
+
+    const long = stop < entry;
+    const direction = long ? 'LONG' : 'SHORT';
+    const riskPerUnit = Math.abs(entry - stop);
+
+    let tradeR: number | null = null;
+    if (!isNaN(exit) && riskPerUnit > 0) {
+      const profitPerUnit = long ? exit - entry : entry - exit;
+      tradeR = profitPerUnit / riskPerUnit;
+    }
+
+    return { direction, riskPerUnit, tradeR };
+  }
+
+  const preview = getTradePreview();
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError('');
@@ -76,9 +100,11 @@ export default function TradeForm() {
         contracts: parseFloat(form.contracts),
         multiplier: parseFloat(form.multiplier) || 1,
         max_win_r: form.max_win_r ? parseFloat(form.max_win_r) : null,
-        reason_for_loss: selectedReasons.length > 0
-          ? selectedReasons.join(', ')
-          : form.reason_for_loss || null,
+        reason_for_loss: isLoss
+          ? (selectedReasons.length > 0
+            ? selectedReasons.join(', ')
+            : form.reason_for_loss || null)
+          : null,
         date_exit: form.date_exit || null,
       };
 
@@ -116,7 +142,7 @@ export default function TradeForm() {
               value={form.ticker}
               onChange={e => updateField('ticker', e.target.value)}
               className="input-field"
-              placeholder="e.g. NQ1!, AAPL, Ethusd"
+              placeholder="e.g. NQ1!, AAPL, ETHUSD"
               required
             />
           </div>
@@ -144,7 +170,25 @@ export default function TradeForm() {
 
       {/* Prices */}
       <div className="card">
-        <h3 className="text-lg font-semibold mb-4">Prices</h3>
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-semibold">Prices</h3>
+          {preview && (
+            <div className="flex items-center gap-3 text-sm">
+              <span className={`px-2 py-0.5 rounded font-medium ${
+                preview.direction === 'LONG'
+                  ? 'bg-emerald-900/50 text-emerald-300'
+                  : 'bg-red-900/50 text-red-300'
+              }`}>
+                {preview.direction}
+              </span>
+              {preview.tradeR !== null && (
+                <span className={`font-medium ${preview.tradeR >= 0 ? 'stat-positive' : 'stat-negative'}`}>
+                  {preview.tradeR.toFixed(2)}R
+                </span>
+              )}
+            </div>
+          )}
+        </div>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           <div>
             <label className="block text-sm font-medium text-gray-400 mb-1">Entry Price *</label>
@@ -170,15 +214,16 @@ export default function TradeForm() {
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-400 mb-1">
-              TP <span className="text-gray-500">(e.g. 400@200.88)</span>
+              TP <span className="text-gray-500">(e.g. 400@200.88, 742@201.97)</span>
             </label>
             <input
               type="text"
               value={form.price_tp}
               onChange={e => updateField('price_tp', e.target.value)}
               className="input-field"
-              placeholder="contracts@price, ..."
+              placeholder="contracts@price, contracts@price"
             />
+            <p className="text-xs text-gray-600 mt-1">For partial TPs. R is averaged weighted by contracts.</p>
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-400 mb-1">Exit Price</label>
@@ -189,6 +234,7 @@ export default function TradeForm() {
               onChange={e => updateField('price_exit', e.target.value)}
               className="input-field"
             />
+            <p className="text-xs text-gray-600 mt-1">Final exit or single exit price.</p>
           </div>
         </div>
       </div>
@@ -240,40 +286,62 @@ export default function TradeForm() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-400 mb-2">Reason for Loss</label>
-            <div className="flex flex-wrap gap-2 mb-2">
-              {LOSS_REASONS.map(reason => (
-                <button
-                  key={reason}
-                  type="button"
-                  onClick={() => toggleReason(reason)}
-                  className={`text-xs px-2 py-1 rounded-full border transition-colors ${
-                    selectedReasons.includes(reason)
-                      ? 'bg-red-900 border-red-700 text-red-200'
-                      : 'bg-gray-800 border-gray-700 text-gray-400 hover:border-gray-600'
-                  }`}
-                >
-                  {reason}
-                </button>
-              ))}
-            </div>
-            <input
-              type="text"
-              value={form.reason_for_loss}
-              onChange={e => updateField('reason_for_loss', e.target.value)}
-              className="input-field"
-              placeholder="Or type custom reason..."
-            />
-          </div>
-
-          <div>
             <label className="block text-sm font-medium text-gray-400 mb-1">Win Optimization</label>
             <textarea
               value={form.win_optimization}
               onChange={e => updateField('win_optimization', e.target.value)}
               className="input-field min-h-[60px]"
-              placeholder="How could the win have been better?"
+              placeholder="How could this trade have been better managed?"
             />
+          </div>
+
+          {/* Loss toggle + reasons */}
+          <div className="border-t border-gray-800 pt-4">
+            <label className="flex items-center gap-3 cursor-pointer mb-3">
+              <div
+                className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-colors ${
+                  isLoss
+                    ? 'bg-red-600 border-red-500'
+                    : 'border-gray-600 hover:border-gray-500'
+                }`}
+                onClick={() => setIsLoss(!isLoss)}
+              >
+                {isLoss && <span className="text-white text-xs font-bold">{'\u2713'}</span>}
+              </div>
+              <span className="text-sm font-medium text-gray-300">This is a loss</span>
+              <span className="text-xs text-gray-500">Check to add loss reasons and tags</span>
+            </label>
+
+            {isLoss && (
+              <div className="space-y-3 pl-8 border-l-2 border-red-800/50">
+                <div>
+                  <label className="block text-sm font-medium text-red-400 mb-2">Reason for Loss</label>
+                  <div className="flex flex-wrap gap-2 mb-2">
+                    {LOSS_REASONS.map(reason => (
+                      <button
+                        key={reason}
+                        type="button"
+                        onClick={() => toggleReason(reason)}
+                        className={`text-xs px-2 py-1 rounded-full border transition-colors ${
+                          selectedReasons.includes(reason)
+                            ? 'bg-red-900 border-red-700 text-red-200'
+                            : 'bg-gray-800 border-gray-700 text-gray-400 hover:border-gray-600'
+                        }`}
+                      >
+                        {reason}
+                      </button>
+                    ))}
+                  </div>
+                  <input
+                    type="text"
+                    value={form.reason_for_loss}
+                    onChange={e => updateField('reason_for_loss', e.target.value)}
+                    className="input-field"
+                    placeholder="Or type custom reason..."
+                  />
+                </div>
+              </div>
+            )}
           </div>
 
           <div>
@@ -294,7 +362,7 @@ export default function TradeForm() {
               value={form.tags}
               onChange={e => updateField('tags', e.target.value)}
               className="input-field"
-              placeholder="e.g. split entry, knife catch, good try but loss"
+              placeholder="e.g. split entry, knife catch, trend follow"
             />
           </div>
 

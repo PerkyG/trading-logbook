@@ -182,7 +182,7 @@ export default function SettingsPage() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-400 mb-1">
-                    Stepsize Up (trades)
+                    R Threshold to Level Up
                   </label>
                   <input
                     type="number"
@@ -190,7 +190,7 @@ export default function SettingsPage() {
                     onChange={e => setForm(prev => ({ ...prev, stepsize_up: e.target.value }))}
                     className="input-field"
                   />
-                  <p className="text-xs text-gray-500 mt-1">Number of trades with positive cum R to level up</p>
+                  <p className="text-xs text-gray-500 mt-1">Cumulative R needed to level up (e.g. 30 = 30R)</p>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-400 mb-1">

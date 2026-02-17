@@ -19,10 +19,10 @@ interface TraderStats {
   };
   level: {
     level: number;
-    levelToGo: number;
+    rToNextLevel: number;
     currentRiskPct: number;
     cumRSinceLevel: number;
-    tradesSinceLevel: number;
+    levelUpThreshold: number;
   };
   currentEquity: number;
   unanalysedCount: number;

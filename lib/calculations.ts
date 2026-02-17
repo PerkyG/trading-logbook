@@ -2,6 +2,7 @@ export interface TradeInput {
   price_entry: number;
   price_stop: number;
   price_exit: number | null;
+  price_tp: string | null; // partial TPs, e.g. "400@200.88, 742@201.97"
   contracts: number;
   multiplier: number;
 }
@@ -28,21 +29,136 @@ export interface CalculatedFields {
   power_norm: number;
 }
 
+/**
+ * Determine if trade is long or short.
+ * Long: stop is below entry (stop < entry)
+ * Short: stop is above entry (stop > entry)
+ */
 export function isLong(entry: number, stop: number): boolean {
   return stop < entry;
 }
 
-export function calculateTradeR(input: TradeInput): number | null {
-  if (input.price_exit === null) return null;
-  const riskPerUnit = Math.abs(input.price_entry - input.price_stop);
-  if (riskPerUnit === 0) return 0;
-  const direction = isLong(input.price_entry, input.price_stop) ? 1 : -1;
-  return ((input.price_exit - input.price_entry) * direction) / riskPerUnit;
+/**
+ * Parse partial take profit string like "400@200.88, 742@201.97"
+ * Returns array of { contracts, price } objects.
+ * Also supports simple "200.88, 201.97" (just prices, no contracts prefix)
+ */
+export function parsePartialTPs(tpStr: string | null): Array<{ contracts: number; price: number }> | null {
+  if (!tpStr || tpStr.trim() === '') return null;
+
+  const parts = tpStr.split(',').map(s => s.trim()).filter(s => s);
+  const results: Array<{ contracts: number; price: number }> = [];
+
+  for (const part of parts) {
+    if (part.includes('@')) {
+      // Format: contracts@price
+      const [contractsStr, priceStr] = part.split('@');
+      const contracts = parseFloat(contractsStr);
+      const price = parseFloat(priceStr);
+      if (!isNaN(contracts) && !isNaN(price)) {
+        results.push({ contracts, price });
+      }
+    } else {
+      // Just a price, no contract count
+      const price = parseFloat(part);
+      if (!isNaN(price)) {
+        results.push({ contracts: 0, price }); // contracts=0 means unknown
+      }
+    }
+  }
+
+  return results.length > 0 ? results : null;
 }
 
-export function calculatePnl(input: TradeInput): number | null {
+/**
+ * Calculate R-multiple for a trade.
+ *
+ * R = (profit per unit) / (risk per unit)
+ *
+ * For LONG:  risk per unit = entry - stop, profit per unit = exit - entry
+ * For SHORT: risk per unit = stop - entry, profit per unit = entry - exit
+ *
+ * With partial take profits: weighted average exit price is used.
+ * e.g. "400@200.88, 742@201.97" means 400 contracts closed at 200.88, 742 at 201.97
+ * Weighted avg exit = (400*200.88 + 742*201.97) / (400+742)
+ */
+export function calculateTradeR(input: TradeInput): number | null {
+  const riskPerUnit = Math.abs(input.price_entry - input.price_stop);
+  if (riskPerUnit === 0) return 0;
+
+  const long = isLong(input.price_entry, input.price_stop);
+
+  // Try partial TPs first
+  const partialTPs = parsePartialTPs(input.price_tp);
+
+  if (partialTPs && partialTPs.length > 0 && partialTPs.some(tp => tp.contracts > 0)) {
+    // Use weighted average exit from partial TPs
+    const totalContracts = partialTPs.reduce((sum, tp) => sum + tp.contracts, 0);
+    if (totalContracts > 0) {
+      const weightedExitPrice = partialTPs.reduce((sum, tp) => sum + tp.contracts * tp.price, 0) / totalContracts;
+      const profitPerUnit = long
+        ? weightedExitPrice - input.price_entry
+        : input.price_entry - weightedExitPrice;
+      return profitPerUnit / riskPerUnit;
+    }
+  }
+
+  // Fallback to single exit price
   if (input.price_exit === null) return null;
-  return (input.price_exit - input.price_entry) * input.contracts * input.multiplier;
+
+  const profitPerUnit = long
+    ? input.price_exit - input.price_entry
+    : input.price_entry - input.price_exit;
+
+  return profitPerUnit / riskPerUnit;
+}
+
+/**
+ * Calculate PnL in USD.
+ * Supports partial take profits for more accurate PnL calculation.
+ *
+ * For LONG:  PnL = (exit - entry) * contracts * multiplier
+ * For SHORT: PnL = (entry - exit) * contracts * multiplier
+ */
+export function calculatePnl(input: TradeInput): number | null {
+  const long = isLong(input.price_entry, input.price_stop);
+  const partialTPs = parsePartialTPs(input.price_tp);
+
+  if (partialTPs && partialTPs.length > 0 && partialTPs.some(tp => tp.contracts > 0)) {
+    // Calculate PnL from partial take profits
+    let totalPnl = 0;
+    let contractsClosed = 0;
+
+    for (const tp of partialTPs) {
+      if (tp.contracts > 0) {
+        const profitPerUnit = long
+          ? tp.price - input.price_entry
+          : input.price_entry - tp.price;
+        totalPnl += profitPerUnit * tp.contracts * input.multiplier;
+        contractsClosed += tp.contracts;
+      }
+    }
+
+    // If there's a final exit price for remaining contracts
+    if (input.price_exit !== null && contractsClosed < input.contracts) {
+      const remaining = input.contracts - contractsClosed;
+      const profitPerUnit = long
+        ? input.price_exit - input.price_entry
+        : input.price_entry - input.price_exit;
+      totalPnl += profitPerUnit * remaining * input.multiplier;
+    }
+
+    return totalPnl;
+  }
+
+  // Simple single exit
+  if (input.price_exit === null) return null;
+
+  const profitPerUnit = long
+    ? input.price_exit - input.price_entry
+    : input.price_entry - input.price_exit;
+
+  return profitPerUnit * input.contracts * input.multiplier;
 }
 
 export function calculateUsdAtRisk(input: TradeInput): number {

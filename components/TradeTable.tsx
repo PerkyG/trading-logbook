@@ -14,6 +14,7 @@ interface Trade {
   price_entry: string;
   price_stop: string;
   price_exit: string | null;
+  price_tp: string | null;
   contracts: string;
   multiplier: string;
   trade_r: string | null;
@@ -41,6 +42,188 @@ interface Trader {
   name: string;
 }
 
+// ── EditModal ─────────────────────────────────────────────────────────────────
+function EditModal({ trade, onClose, onSaved }: {
+  trade: Trade;
+  onClose: () => void;
+  onSaved: (updated: Partial<Trade>) => void;
+}) {
+  const [form, setForm] = useState({
+    ticker: trade.ticker ?? '',
+    price_entry: trade.price_entry ?? '',
+    price_stop: trade.price_stop ?? '',
+    price_tp: trade.price_tp ?? '',
+    contracts: trade.contracts ?? '',
+    multiplier: trade.multiplier ?? '',
+    date_exit: trade.date_exit ? trade.date_exit.slice(0, 16) : '',
+    price_exit: trade.price_exit ?? '',
+    max_win_r: trade.max_win_r ?? '',
+    reason_for_loss: trade.reason_for_loss ?? '',
+    win_optimization: trade.win_optimization ?? '',
+    notes: trade.notes ?? '',
+    tags: trade.tags ?? '',
+  });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+
+  function set(field: string, val: string) {
+    setForm(prev => ({ ...prev, [field]: val }));
+  }
+
+  async function handleSave(e: React.FormEvent) {
+    e.preventDefault();
+    setSaving(true);
+    setError('');
+    try {
+      const body: Record<string, string | null> = {
+        ticker: form.ticker || null,
+        price_entry: form.price_entry || null,
+        price_stop: form.price_stop || null,
+        contracts: form.contracts || null,
+        multiplier: form.multiplier || null,
+        price_tp: form.price_tp || null,
+        date_exit: form.date_exit || null,
+        price_exit: form.price_exit || null,
+        max_win_r: form.max_win_r || null,
+        reason_for_loss: form.reason_for_loss || null,
+        win_optimization: form.win_optimization || null,
+        notes: form.notes || null,
+        tags: form.tags || null,
+      };
+
+      const res = await fetch(`/api/trades/${trade.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) { setError('Opslaan mislukt'); setSaving(false); return; }
+      const { trade: updated } = await res.json();
+      onSaved(updated);
+      onClose();
+    } catch {
+      setError('Netwerk fout');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/70 flex items-start justify-center z-50 p-4 overflow-y-auto">
+      <div className="bg-gray-900 border border-gray-700 rounded-2xl w-full max-w-2xl shadow-2xl my-8">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-700">
+          <h2 className="text-lg font-bold text-white">
+            Trade #{trade.trade_number} bewerken — {trade.ticker}
+          </h2>
+          <button onClick={onClose} className="text-gray-400 hover:text-white transition-colors text-2xl leading-none">&times;</button>
+        </div>
+        <form onSubmit={handleSave} className="p-6 space-y-5">
+          {/* Entry data */}
+          <div>
+            <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Entry</h3>
+            <div className="grid grid-cols-2 gap-3">
+              <label className="col-span-2">
+                <span className="text-xs text-gray-400 mb-1 block">Ticker</span>
+                <input value={form.ticker} onChange={e => set('ticker', e.target.value.toUpperCase())}
+                  className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono uppercase" />
+              </label>
+              <label>
+                <span className="text-xs text-gray-400 mb-1 block">Entry prijs</span>
+                <input type="number" step="any" value={form.price_entry} onChange={e => set('price_entry', e.target.value)}
+                  className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono" />
+              </label>
+              <label>
+                <span className="text-xs text-gray-400 mb-1 block">Stop</span>
+                <input type="number" step="any" value={form.price_stop} onChange={e => set('price_stop', e.target.value)}
+                  className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono" />
+              </label>
+              <label>
+                <span className="text-xs text-gray-400 mb-1 block">Contracts</span>
+                <input type="number" step="any" value={form.contracts} onChange={e => set('contracts', e.target.value)}
+                  className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono" />
+              </label>
+              <label>
+                <span className="text-xs text-gray-400 mb-1 block">Multiplier</span>
+                <input type="number" step="any" value={form.multiplier} onChange={e => set('multiplier', e.target.value)}
+                  className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono" />
+              </label>
+            </div>
+          </div>
+
+          {/* Exit data */}
+          <div>
+            <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Exit</h3>
+            <div className="grid grid-cols-2 gap-3">
+              <label>
+                <span className="text-xs text-gray-400 mb-1 block">Exit datum</span>
+                <input type="datetime-local" value={form.date_exit} onChange={e => set('date_exit', e.target.value)}
+                  className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              </label>
+              <label>
+                <span className="text-xs text-gray-400 mb-1 block">Exit prijs</span>
+                <input type="number" step="any" value={form.price_exit} onChange={e => set('price_exit', e.target.value)}
+                  className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono" />
+              </label>
+              <label>
+                <span className="text-xs text-gray-400 mb-1 block">Take Profit</span>
+                <input type="number" step="any" value={form.price_tp} onChange={e => set('price_tp', e.target.value)}
+                  className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono" />
+              </label>
+              <label>
+                <span className="text-xs text-gray-400 mb-1 block">Max Win R</span>
+                <input type="number" step="any" value={form.max_win_r} onChange={e => set('max_win_r', e.target.value)}
+                  className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono" />
+              </label>
+            </div>
+          </div>
+
+          {/* Analysis */}
+          <div>
+            <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Analyse</h3>
+            <div className="space-y-3">
+              <label>
+                <span className="text-xs text-gray-400 mb-1 block">Reden verlies</span>
+                <input value={form.reason_for_loss} onChange={e => set('reason_for_loss', e.target.value)}
+                  className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              </label>
+              <label>
+                <span className="text-xs text-gray-400 mb-1 block">Win optimalisatie</span>
+                <input value={form.win_optimization} onChange={e => set('win_optimization', e.target.value)}
+                  className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              </label>
+              <label>
+                <span className="text-xs text-gray-400 mb-1 block">Tags (komma-gescheiden)</span>
+                <input value={form.tags} onChange={e => set('tags', e.target.value)}
+                  placeholder="bijv. VWAP, breakout, missed-entry"
+                  className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              </label>
+              <label>
+                <span className="text-xs text-gray-400 mb-1 block">Notities</span>
+                <textarea value={form.notes} onChange={e => set('notes', e.target.value)}
+                  rows={3}
+                  className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none" />
+              </label>
+            </div>
+          </div>
+
+          {error && <p className="text-red-400 text-sm">{error}</p>}
+
+          <div className="flex gap-3 pt-2">
+            <button type="submit" disabled={saving}
+              className="flex-1 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-semibold text-sm transition-colors">
+              {saving ? 'Opslaan...' : 'Opslaan'}
+            </button>
+            <button type="button" onClick={onClose}
+              className="px-5 py-2.5 rounded-xl bg-gray-800 hover:bg-gray-700 text-gray-300 text-sm transition-colors">
+              Annuleer
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+// ── TradeTable ────────────────────────────────────────────────────────────────
 export default function TradeTable({ currentTraderId }: { currentTraderId: number }) {
   const router = useRouter();
   const [trades, setTrades] = useState<Trade[]>([]);
@@ -50,6 +233,8 @@ export default function TradeTable({ currentTraderId }: { currentTraderId: numbe
   const [loading, setLoading] = useState(true);
   const [sortField, setSortField] = useState<string>('date_entry');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
+  const [editingTrade, setEditingTrade] = useState<Trade | null>(null);
+  const [deletingId, setDeletingId] = useState<number | null>(null);
 
   useEffect(() => {
     Promise.all([
@@ -73,6 +258,20 @@ export default function TradeTable({ currentTraderId }: { currentTraderId: numbe
         prev.map(t => t.id === trade.id ? { ...t, analysed: !t.analysed } : t)
       );
     }
+  }
+
+  async function deleteTrade(id: number) {
+    setDeletingId(id);
+    const res = await fetch(`/api/trades/${id}`, { method: 'DELETE' });
+    if (res.ok) {
+      setTrades(prev => prev.filter(t => t.id !== id));
+      if (expandedId === id) setExpandedId(null);
+    }
+    setDeletingId(null);
+  }
+
+  function handleEditSaved(updated: Partial<Trade>) {
+    setTrades(prev => prev.map(t => t.id === updated.id ? { ...t, ...updated } : t));
   }
 
   const filtered = trades.filter(t =>
@@ -166,18 +365,18 @@ export default function TradeTable({ currentTraderId }: { currentTraderId: numbe
               <th className="text-left py-2 px-2">#</th>
               <th className="text-left py-2 px-2">Trader</th>
               <th className="text-left py-2 px-2 cursor-pointer hover:text-white" onClick={() => toggleSort('date_entry')}>
-                Date {sortField === 'date_entry' && (sortDir === 'asc' ? '\u2191' : '\u2193')}
+                Date {sortField === 'date_entry' && (sortDir === 'asc' ? '↑' : '↓')}
               </th>
               <th className="text-left py-2 px-2">Ticker</th>
               <th className="text-right py-2 px-2">Entry</th>
               <th className="text-right py-2 px-2">Stop</th>
               <th className="text-right py-2 px-2">Exit</th>
               <th className="text-right py-2 px-2 cursor-pointer hover:text-white" onClick={() => toggleSort('nett_r')}>
-                Nett R {sortField === 'nett_r' && (sortDir === 'asc' ? '\u2191' : '\u2193')}
+                Nett R {sortField === 'nett_r' && (sortDir === 'asc' ? '↑' : '↓')}
               </th>
               <th className="text-right py-2 px-2">Sum R</th>
               <th className="text-right py-2 px-2 cursor-pointer hover:text-white" onClick={() => toggleSort('pnl_usd')}>
-                PnL $ {sortField === 'pnl_usd' && (sortDir === 'asc' ? '\u2191' : '\u2193')}
+                PnL $ {sortField === 'pnl_usd' && (sortDir === 'asc' ? '↑' : '↓')}
               </th>
               <th className="text-center py-2 px-2">Lvl</th>
               <th className="text-center py-2 px-2">Analysed</th>
@@ -235,11 +434,11 @@ export default function TradeTable({ currentTraderId }: { currentTraderId: numbe
                       }`}
                       disabled={trade.trader_id !== currentTraderId}
                     >
-                      {trade.analysed && '\u2713'}
+                      {trade.analysed && '✓'}
                     </button>
                   </td>
                   <td className="py-2 px-2">
-                    {expandedId === trade.id ? '\u25B2' : '\u25BC'}
+                    {expandedId === trade.id ? '▲' : '▼'}
                   </td>
                 </tr>
                 {expandedId === trade.id && (
@@ -248,7 +447,7 @@ export default function TradeTable({ currentTraderId }: { currentTraderId: numbe
                       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 text-sm">
                         <div>
                           <div className="text-gray-500 text-xs mb-1">Position</div>
-                          <div>{trade.contracts} contracts \u00D7 {trade.multiplier} multiplier</div>
+                          <div>{trade.contracts} contracts &times; {trade.multiplier} multiplier</div>
                           <div className="text-gray-400">Planned Risk: ${formatNum(trade.planned_risk_usd, 0)}</div>
                           <div className="text-gray-400">$ at Risk: ${formatNum(trade.usd_at_risk, 0)}</div>
                           <div className="text-gray-400">Risk Factor: {formatNum(trade.risk_r_factor)}x</div>
@@ -257,7 +456,7 @@ export default function TradeTable({ currentTraderId }: { currentTraderId: numbe
                           <div className="text-gray-500 text-xs mb-1">Performance</div>
                           <div>Trade R: <span className={rColor(trade.trade_r)}>{formatNum(trade.trade_r)}</span></div>
                           <div>Max Win R: {formatNum(trade.max_win_r)}</div>
-                          <div>Equity: ${formatNum(trade.equity_before, 0)} → ${formatNum(trade.equity_after, 0)}</div>
+                          <div>Equity: ${formatNum(trade.equity_before, 0)} &rarr; ${formatNum(trade.equity_after, 0)}</div>
                           <div>Risk %: {trade.risk_pct ? (parseFloat(trade.risk_pct) * 100).toFixed(2) + '%' : '-'}</div>
                         </div>
                         <div>
@@ -309,6 +508,38 @@ export default function TradeTable({ currentTraderId }: { currentTraderId: numbe
                           </div>
                         )}
                       </div>
+
+                      {/* Edit / Delete – alleen voor eigen trades */}
+                      {trade.trader_id === currentTraderId && (
+                        <div className="flex gap-2 mt-4 pt-3 border-t border-gray-700/50">
+                          <button
+                            onClick={e => { e.stopPropagation(); setEditingTrade(trade); }}
+                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-900/40 hover:bg-blue-900/70 text-blue-300 hover:text-blue-200 text-xs font-medium transition-colors border border-blue-800/50"
+                          >
+                            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                                d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931z" />
+                            </svg>
+                            Bewerken
+                          </button>
+                          <button
+                            onClick={e => {
+                              e.stopPropagation();
+                              if (confirm(`Trade #${trade.trade_number} (${trade.ticker}) definitief verwijderen?`)) {
+                                deleteTrade(trade.id);
+                              }
+                            }}
+                            disabled={deletingId === trade.id}
+                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-900/30 hover:bg-red-900/60 text-red-400 hover:text-red-300 text-xs font-medium transition-colors border border-red-800/40 disabled:opacity-50"
+                          >
+                            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                                d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
+                            </svg>
+                            {deletingId === trade.id ? 'Verwijderen...' : 'Verwijderen'}
+                          </button>
+                        </div>
+                      )}
                     </td>
                   </tr>
                 )}
@@ -325,6 +556,15 @@ export default function TradeTable({ currentTraderId }: { currentTraderId: numbe
             Log your first trade
           </button>
         </div>
+      )}
+
+      {/* Edit modal */}
+      {editingTrade && (
+        <EditModal
+          trade={editingTrade}
+          onClose={() => setEditingTrade(null)}
+          onSaved={handleEditSaved}
+        />
       )}
     </div>
   );

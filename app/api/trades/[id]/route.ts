@@ -57,6 +57,7 @@ export async function PUT(
     const values: (string | number | boolean | null)[] = [];
 
     const allowedFields = [
+      'ticker', 'date_entry', 'price_entry', 'price_stop', 'contracts', 'multiplier',
       'date_exit', 'price_exit', 'price_tp', 'analysed', 'max_win_r',
       'reason_for_loss', 'win_optimization', 'screenshots', 'tags', 'notes',
     ];
@@ -72,8 +73,25 @@ export async function PUT(
       return NextResponse.json({ error: 'No fields to update' }, { status: 400 });
     }
 
-    // For simplicity, update fields individually
-    // In production you'd build a proper dynamic query
+    // Update fields individually
+    if (body.ticker !== undefined) {
+      await sql`UPDATE trades SET ticker = ${body.ticker} WHERE id = ${parseInt(params.id)}`;
+    }
+    if (body.date_entry !== undefined) {
+      await sql`UPDATE trades SET date_entry = ${body.date_entry} WHERE id = ${parseInt(params.id)}`;
+    }
+    if (body.price_entry !== undefined) {
+      await sql`UPDATE trades SET price_entry = ${parseFloat(body.price_entry)} WHERE id = ${parseInt(params.id)}`;
+    }
+    if (body.price_stop !== undefined) {
+      await sql`UPDATE trades SET price_stop = ${parseFloat(body.price_stop)} WHERE id = ${parseInt(params.id)}`;
+    }
+    if (body.contracts !== undefined) {
+      await sql`UPDATE trades SET contracts = ${parseFloat(body.contracts)} WHERE id = ${parseInt(params.id)}`;
+    }
+    if (body.multiplier !== undefined) {
+      await sql`UPDATE trades SET multiplier = ${parseFloat(body.multiplier)} WHERE id = ${parseInt(params.id)}`;
+    }
     if (body.analysed !== undefined) {
       await sql`UPDATE trades SET analysed = ${body.analysed} WHERE id = ${parseInt(params.id)}`;
     }
